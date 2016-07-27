@@ -21,6 +21,7 @@ type alias Uniform =
   , texture : GL.Texture
   , textureSize : Vec2
   , frame : Int
+  , layer : Float
   }
 
 
@@ -45,8 +46,7 @@ mesh =
 render : Float -> (Int, Int) -> Int -> Textures -> List Box.TexturedBoxData -> Html Action
 render devicePixelRatio ((w, h) as dimensions) tileSize textures boxes =
   GL.toHtmlWith
-    [ GL.Enable GL.Blend
-    , GL.BlendFunc (GL.One, GL.OneMinusSrcAlpha)
+    [ GL.Enable GL.DepthTest
     ]
     [ width (toFloat w * toFloat tileSize * devicePixelRatio |> round)
     , height (toFloat h * toFloat tileSize * devicePixelRatio |> round)
@@ -62,7 +62,7 @@ render devicePixelRatio ((w, h) as dimensions) tileSize textures boxes =
 
 
 renderTextured : (Int, Int) -> Textures -> Box.TexturedBoxData -> Maybe GL.Renderable
-renderTextured (w, h) textures ({textureId, position, frame, offset} as box) =
+renderTextured (w, h) textures {textureId, position, frame, offset, layer} =
   AllDict.get textureId textures
   `Maybe.andThen`
   (\{size, texture} ->
@@ -74,6 +74,7 @@ renderTextured (w, h) textures ({textureId, position, frame, offset} as box) =
           mesh
           { screenSize = vec2 (toFloat w) (toFloat h)
           , offset = vec2 (fst offset + fst position) (snd offset + snd position)
+          , layer = layer
           , texture = textureValue.texture
           , frame = frame
           , textureSize = fromTuple textureValue.size
@@ -90,13 +91,14 @@ vertexShader = [glsl|
   precision mediump float;
   attribute vec2 position;
   uniform vec2 offset;
+  uniform float layer;
   uniform vec2 frameSize;
   uniform vec2 screenSize;
   varying vec2 texturePos;
 
   void main () {
     vec2 clipSpace = (position * frameSize + offset) / screenSize * 2.0 - 1.0;
-    gl_Position = vec4(clipSpace.x, -clipSpace.y, 0, 1);
+    gl_Position = vec4(clipSpace.x, -clipSpace.y, -layer / 10000.0, 1);
     texturePos = position;
   }
 
@@ -118,12 +120,8 @@ fragmentShader = [glsl|
     int cols = int(1.0 / size.x);
     vec2 frameOffset = size * vec2(float(frame - frame / cols * cols), -float(frame / cols));
     vec2 textureClipSpace = size * texturePos - 1.0;
-    vec4 temp  = texture2D(texture, vec2(textureClipSpace.x, -textureClipSpace.y) + frameOffset);
-    float a = temp.a;
-    float r = temp.r * a;
-    float g = temp.g * a;
-    float b = temp.b * a;
-    gl_FragColor = vec4(r,g,b,a);
+    gl_FragColor = texture2D(texture, vec2(textureClipSpace.x, -textureClipSpace.y) + frameOffset);
+    if (gl_FragColor.a == 0.0) discard;
   }
 
 |]

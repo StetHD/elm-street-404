@@ -490,7 +490,7 @@ render model =
     (texturedBoxes, clickableBoxes) = Box.split (boxes model)
   in
     { model
-    | texturedBoxes = List.sortBy .layer texturedBoxes
+    | texturedBoxes = texturedBoxes
     , clickableBoxes = clickableBoxes
     }
 
